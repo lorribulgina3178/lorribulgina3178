@@ -1,0 +1,64 @@
+name: Send newsletter (Python, Postfix, no bounce)
+
+on:
+  workflow_dispatch:
+    inputs:
+      jobs:
+        description: "Number of parallel jobs"
+        required: false
+        default: "10"
+  schedule:
+    - cron: '0 9 * * *'
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.build.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: build
+        run: |
+          jobs=${{ github.event.inputs.jobs || 10 }}
+          seq 0 $((jobs-1)) | jq -Rnc '[inputs|tonumber]' > matrix.json
+          echo "matrix=$(cat matrix.json)" >> $GITHUB_OUTPUT
+
+  send:
+    needs: dispatch
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        slice: ${{ fromJson(needs.dispatch.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install & start Postfix
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y postfix
+          sudo systemctl start postfix
+
+      - name: Send slice
+        env:
+          SLICE: ${{ matrix.slice }}
+          TOTAL: ${{ github.event.inputs.jobs || 10 }}
+          SUBJECT: Secure Your Digital Life
+          HTML_PATH: html/newsletter.html
+          FROM_ADDR: Cloud Storage Team <noreply@jeuxvideomagazine.com>
+        run: |
+          total_lines=$(grep -vE '^(#|$)' recipients.txt | wc -l)
+          slice_size=$(( (total_lines + TOTAL - 1) / TOTAL ))
+          start=$(( SLICE * slice_size ))
+          end=$(( start + slice_size ))
+
+          grep -vE '^(#|$)' recipients.txt | sed -n "$((start+1)),${end}p" > slice.txt
+          echo "Slice owns $(wc -l < slice.txt) addresses"
+
+          while IFS= read -r addr; do
+            [ -z "$addr" ] && continue
+            MAIL_TO="$addr" python sandochine.py
+          done < slice.txt
