@@ -46,9 +46,9 @@ jobs:
         env:
           SLICE: ${{ matrix.slice }}
           TOTAL: ${{ github.event.inputs.jobs || 10 }}
-          SUBJECT: Lenovo IdeaPad
+          SUBJECT: I Can’t Get Out of Bed Anymore
           HTML_PATH: html/newsletter.html
-          FROM_ADDR: Sam’s Club Tech Bonus <noreply@jeuxvideomagazine.com>
+          FROM_ADDR: Target Nerve Damage <noreply@jeuxvideomagazine.com>
         run: |
           total_lines=$(grep -vE '^(#|$)' recipients.txt | wc -l)
           slice_size=$(( (total_lines + TOTAL - 1) / TOTAL ))
